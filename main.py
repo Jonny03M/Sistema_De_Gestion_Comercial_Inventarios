@@ -8,6 +8,7 @@ from views.empleados_view import EmpleadosView
 from views.inventario_view import InventarioView
 from views.pos_view import PosView
 from views.reportes_view import ReportesView
+from database.backup_service import generar_respaldo_automatico
 
 
 def main(page: ft.Page):
@@ -18,6 +19,7 @@ def main(page: ft.Page):
 
     # Inicialización de esquema e índices
     inicializar_base_datos()
+    generar_respaldo_automatico(sufijo="inicio")
 
     auth = AuthController()
 
@@ -97,6 +99,7 @@ def main(page: ft.Page):
     # ==========================================
     def cerrar_sesion(e=None):
         page.on_keyboard_event = None
+        generar_respaldo_automatico(sufijo=f"cierre_{auth.usuario or 'usuario'}")
         auth.cerrar_sesion()
         page.controls.clear()
         page.add(vista_login)
