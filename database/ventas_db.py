@@ -331,3 +331,111 @@ def obtener_ventas_por_rango(
         cursor = conn.cursor()
         cursor.execute(query, (fecha_inicio, fecha_fin))
         return cursor.fetchall()
+
+def actualizar_proveedor(
+    id_proveedor: int,
+    nombre_empresa: str,
+    contacto_nombre: str = "",
+    telefono: str = "",
+):
+    """Actualiza la información de un proveedor existente."""
+    query = """
+        UPDATE proveedores 
+        SET nombre_empresa = ?, contacto_nombre = ?, telefono = ?
+        WHERE id_proveedor = ?;
+    """
+    with obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (nombre_empresa, contacto_nombre, telefono, id_proveedor))
+        conn.commit()
+
+
+def obtener_historial_compras_filtrado(
+    fecha_inicio: str, fecha_fin: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Obtiene el historial de compras realizadas a proveedores en un rango de fechas."""
+    if not fecha_fin:
+        fecha_fin = fecha_inicio
+
+    query = """
+        SELECT 
+            c.id_compra,
+            strftime('%Y-%m-%d %I:%M %p', c.fecha_hora) AS fecha_hora,
+            c.total,
+            p.nombre_empresa AS proveedor
+        FROM compras c
+        INNER JOIN proveedores p ON c.id_proveedor = p.id_proveedor
+        WHERE date(c.fecha_hora) BETWEEN date(?) AND date(?)
+        ORDER BY c.id_compra DESC;
+    """
+    with obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (fecha_inicio, fecha_fin))
+        return cursor.fetchall()
+
+
+def obtener_movimientos_caja_por_rango(
+    fecha_inicio: str, fecha_fin: Optional[str] = None
+) -> List[sqlite3.Row]:
+    """Obtiene las entradas y salidas de efectivo registradas en un periodo."""
+    if not fecha_fin:
+        fecha_fin = fecha_inicio
+
+    query = """
+        SELECT 
+            m.id_movimiento,
+            strftime('%Y-%m-%d %I:%M %p', m.fecha_hora) AS fecha_hora,
+            m.tipo,
+            m.monto,
+            m.motivo,
+            e.nombre || ' ' || e.apellido AS cajero
+        FROM movimientos_caja m
+        INNER JOIN empleados e ON m.id_empleado = e.id_empleado
+        WHERE date(m.fecha_hora) BETWEEN date(?) AND date(?)
+        ORDER BY m.id_movimiento DESC;
+    """
+    with obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (fecha_inicio, fecha_fin))
+        return cursor.fetchall()
+
+def obtener_detalle_compra_por_id(id_compra: int) -> dict:
+    """Obtiene la información de cabecera y el listado de productos de una compra."""
+    with obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                c.id_compra,
+                strftime('%Y-%m-%d %I:%M %p', c.fecha_hora) AS fecha_hora,
+                c.total,
+                p.nombre_empresa AS proveedor,
+                COALESCE(p.telefono, '') AS telefono
+            FROM compras c
+            INNER JOIN proveedores p ON c.id_proveedor = p.id_proveedor
+            WHERE c.id_compra = ?;
+            """,
+            (id_compra,),
+        )
+        compra = cursor.fetchone()
+
+        cursor.execute(
+            """
+            SELECT 
+                dc.cantidad,
+                p.nombre,
+                p.tipo_unidad,
+                dc.precio_costo_unitario,
+                dc.subtotal
+            FROM detalle_compra dc
+            INNER JOIN productos p ON dc.id_producto = p.id_producto
+            WHERE dc.id_compra = ?;
+            """,
+            (id_compra,),
+        )
+        detalles = cursor.fetchall()
+
+        return {
+            "compra": dict(compra) if compra else None,
+            "detalles": [dict(d) for d in detalles],
+        }

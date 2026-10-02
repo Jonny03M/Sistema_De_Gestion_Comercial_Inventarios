@@ -22,11 +22,11 @@ class DialogoModalBase(ft.AlertDialog):
         mostrar_boton_confirmar: bool = True,
     ):
         super().__init__()
-        self.page = page
+        self.pagina = page
         self.al_confirmar = al_confirmar
         self.al_cancelar = al_cancelar
 
-        # Encabezado
+        # 1. Encabezado
         self.lbl_titulo = ft.Text(titulo, weight=ft.FontWeight.BOLD)
         if icono:
             self.title = ft.Row(
@@ -37,7 +37,7 @@ class DialogoModalBase(ft.AlertDialog):
         else:
             self.title = self.lbl_titulo
 
-        # Contenedor de contenido interno
+        # 2. Contenedor de contenido interno
         self.col_contenido = ft.Column(tight=True, spacing=10, scroll=ft.ScrollMode.AUTO)
         self.content = ft.Container(
             content=self.col_contenido,
@@ -61,8 +61,8 @@ class DialogoModalBase(ft.AlertDialog):
 
         self.actions = [self.btn_cancelar, self.btn_confirmar]
 
-        if self not in self.page.overlay:
-            self.page.overlay.append(self)
+        if self not in self.pagina.overlay:
+            self.pagina.overlay.append(self)
 
     def set_contenido(self, controles: List[ft.Control]):
         """Reemplaza los controles internos del formulario modal."""
@@ -70,11 +70,11 @@ class DialogoModalBase(ft.AlertDialog):
 
     def abrir(self):
         self.open = True
-        self.page.update()
+        self.pagina.update()
 
     def cerrar(self):
         self.open = False
-        self.page.update()
+        self.pagina.update()
 
     def _click_cancelar(self, e):
         self.cerrar()

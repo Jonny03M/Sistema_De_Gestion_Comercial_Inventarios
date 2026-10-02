@@ -10,7 +10,7 @@ class SelectorRangoFechas(ft.Row):
 
     def __init__(self, page: ft.Page, al_cambiar_rango: Callable[[str, str, str], None]):
         super().__init__()
-        self.page = page
+        self.pagina = page
         self.al_cambiar_rango = al_cambiar_rango
         self.spacing = 6
         self.wrap = True
@@ -116,28 +116,28 @@ class SelectorRangoFechas(ft.Row):
         )
 
         for elemento in [self.picker_un_dia, self.picker_inicio, self.picker_fin, self.dialogo_rango]:
-            if elemento not in self.page.overlay:
-                self.page.overlay.append(elemento)
+            if elemento not in self.pagina.overlay:
+                self.pagina.overlay.append(elemento)
 
     def _abrir_picker(self, picker: ft.DatePicker):
         picker.open = True
-        self.page.update()
+        self.pagina.update()
 
     def _al_cambiar_picker_inicio(self, e):
         if self.picker_inicio.value:
             self._f_ini_temp = self.picker_inicio.value.strftime("%Y-%m-%d")
             self.lbl_desde.value = f"📅 Desde: {self._f_ini_temp}"
-            self.page.update()
+            self.pagina.update()
 
     def _al_cambiar_picker_fin(self, e):
         if self.picker_fin.value:
             self._f_fin_temp = self.picker_fin.value.strftime("%Y-%m-%d")
             self.lbl_hasta.value = f"📅 Hasta: {self._f_fin_temp}"
-            self.page.update()
+            self.pagina.update()
 
     def _cerrar_dialogo_rango(self):
         self.dialogo_rango.open = False
-        self.page.update()
+        self.pagina.update()
 
     def _al_seleccionar_un_dia(self, e):
         if self.picker_un_dia.value:
@@ -187,7 +187,7 @@ class SelectorRangoFechas(ft.Row):
         self.lbl_desde.value = f"📅 Desde: {self._f_ini_temp}"
         self.lbl_hasta.value = f"📅 Hasta: {self._f_fin_temp}"
         self.dialogo_rango.open = True
-        self.page.update()
+        self.pagina.update()
 
     def _construir_ui(self):
         self.controls = [
