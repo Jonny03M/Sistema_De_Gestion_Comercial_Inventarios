@@ -105,7 +105,6 @@ def main(page: ft.Page):
     def cargar_interfaz_principal():
         page.controls.clear()
 
-        # Instanciar vista inicial de caja POS
         vista_pos = PosView(
             page=page,
             mostrar_mensaje=mostrar_mensaje,
@@ -114,49 +113,59 @@ def main(page: ft.Page):
 
         contenedor_principal = ft.Container(content=vista_pos, expand=True)
 
+        # Definir vistas permitidas según el rol
+        if auth.es_admin:
+            destinos = [
+                ft.NavigationRailDestination(icon=ft.Icons.POINT_OF_SALE, label="Ventas (POS)"),
+                ft.NavigationRailDestination(icon=ft.Icons.INVENTORY, label="Inventario"),
+                ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING, label="Compras / Prov."),
+                ft.NavigationRailDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, label="Créditos / Envases"),
+                ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT, label="Reportes"),
+                ft.NavigationRailDestination(icon=ft.Icons.GROUP, label="Usuarios"),
+            ]
+        else:
+            destinos = [
+                ft.NavigationRailDestination(icon=ft.Icons.POINT_OF_SALE, label="Ventas (POS)"),
+                ft.NavigationRailDestination(icon=ft.Icons.SEARCH, label="Consultar Precios"),
+                ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING, label="Recepción Compras"),
+                ft.NavigationRailDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, label="Créditos / Envases"),
+            ]
+
         def cambiar_pestana(e):
             indice = e.control.selected_index
+
             if indice == 0:
                 contenedor_principal.content = vista_pos
                 vista_pos._configurar_atajos_teclado()
-            elif indice == 1 and auth.es_admin:
+            elif indice == 1:
                 page.on_keyboard_event = None
-                contenedor_principal.content = InventarioView(page, mostrar_mensaje)
-            elif indice == 2 and auth.es_admin:
+                contenedor_principal.content = InventarioView(
+                    page, mostrar_mensaje, es_admin=auth.es_admin
+                )
+            elif indice == 2:
                 page.on_keyboard_event = None
-                contenedor_principal.content = ReportesView(page, mostrar_mensaje)
-            elif indice == 3 and auth.es_admin:
+                contenedor_principal.content = ComprasView(
+                    page, mostrar_mensaje, es_admin=auth.es_admin
+                )
+            elif indice == 3:
                 page.on_keyboard_event = None
-                contenedor_principal.content = EmpleadosView(page, mostrar_mensaje)
+                contenedor_principal.content = ClientesView(
+                    page, mostrar_mensaje, auth.id_empleado, es_admin=auth.es_admin
+                )
             elif indice == 4 and auth.es_admin:
                 page.on_keyboard_event = None
-                contenedor_principal.content = ComprasView(page, mostrar_mensaje)
+                contenedor_principal.content = ReportesView(page, mostrar_mensaje)
             elif indice == 5 and auth.es_admin:
                 page.on_keyboard_event = None
-                contenedor_principal.content = ClientesView(page, mostrar_mensaje, auth.id_empleado)
+                contenedor_principal.content = EmpleadosView(page, mostrar_mensaje)
 
             page.update()
-
-        destinos = [
-            ft.NavigationRailDestination(icon=ft.Icons.POINT_OF_SALE, label="Ventas (POS)")
-        ]
-
-        if auth.es_admin:
-            destinos.extend([
-                ft.NavigationRailDestination(icon=ft.Icons.INVENTORY, label="Inventario"),
-                ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT, label="Reportes"),
-                ft.NavigationRailDestination(icon=ft.Icons.GROUP, label="Usuarios"),
-                ft.NavigationRailDestination(icon=ft.Icons.LOCAL_SHIPPING, label="Compras / Prov."),
-                ft.NavigationRailDestination(
-                    icon=ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, label="Créditos / Envases"
-                ),
-            ])
 
         rail_navegacion = ft.NavigationRail(
             selected_index=0,
             label_type=ft.NavigationRailLabelType.ALL,
             destinations=destinos,
-            min_width=100,
+            min_width=105,
             on_change=cambiar_pestana,
         )
 
@@ -209,7 +218,7 @@ def main(page: ft.Page):
 
         page.add(ft.Column([barra_superior, cuerpo], expand=True))
         page.update()
-
+        
     page.add(vista_login)
     page.update()
 

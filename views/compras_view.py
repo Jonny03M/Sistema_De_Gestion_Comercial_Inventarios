@@ -19,10 +19,11 @@ from database.ventas_db import (
 class ComprasView(ft.Container):
     """Vista modular para gestión de proveedores, compras y recepción de mercancía."""
 
-    def __init__(self, page: ft.Page, mostrar_mensaje: Callable[[str, str], None]):
+    def __init__(self, page: ft.Page, mostrar_mensaje: Callable[[str, str], None],es_admin: bool = True,):
         super().__init__(expand=True, padding=10)
         self.pagina = page
         self.mostrar_mensaje = mostrar_mensaje
+        self.es_admin = es_admin
 
         # Estado interno
         self.id_proveedor_editar: Optional[int] = None
@@ -375,6 +376,7 @@ class ComprasView(ft.Container):
                 icon=ft.Icons.EDIT_OUTLINED,
                 icon_color=ft.Colors.BLUE_600,
                 tooltip="Editar proveedor",
+                visible=self.es_admin,
                 on_click=lambda e, p_data=p: self.abrir_modal_editar_prov(p_data),
             )
             self.tabla_proveedores.rows.append(

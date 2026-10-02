@@ -13,7 +13,6 @@ from database.clientes_db import (
 
 class ClientesView(ft.Container):
     """Vista modular para la administración de clientes, cuentas por cobrar,
-
     abonos y control de envases retornables en garantía.
     """
 
@@ -22,11 +21,13 @@ class ClientesView(ft.Container):
         page: ft.Page,
         mostrar_mensaje: Callable[[str, str], None],
         id_empleado_activo: int = 1,
+        es_admin: bool = True,
     ):
         super().__init__(expand=True, padding=10)
         self.pagina = page
         self.mostrar_mensaje = mostrar_mensaje
         self.id_empleado_activo = id_empleado_activo
+        self.es_admin = es_admin
 
         # Estado transaccional para modales
         self.id_cliente_activo: Optional[int] = None
@@ -247,12 +248,16 @@ class ClientesView(ft.Container):
                 ),
             )
 
-            btn_edit_lim = ft.IconButton(
-                icon=ft.Icons.EDIT_NOTE,
-                icon_color=ft.Colors.BLUE_700,
-                tooltip="Ajustar Límite de Crédito",
-                on_click=lambda e, c=cl, l=limite: self.abrir_modal_limite(c["id_cliente"], c["nombre"], l),
-            )
+            acciones = [btn_abonar, btn_dev_envases]
+
+            if self.es_admin:
+                btn_edit_lim = ft.IconButton(
+                    icon=ft.Icons.EDIT_NOTE,
+                    icon_color=ft.Colors.BLUE_700,
+                    tooltip="Ajustar Límite de Crédito",
+                    on_click=lambda e, c=cl, l=limite: self.abrir_modal_limite(c["id_cliente"], c["nombre"], l),
+                )
+                acciones.append(btn_edit_lim)
 
             self.tabla_clientes.rows.append(
                 ft.DataRow(
@@ -286,12 +291,12 @@ class ClientesView(ft.Container):
                                 weight=ft.FontWeight.BOLD if tiene_env else ft.FontWeight.NORMAL,
                             )
                         ),
-                        ft.DataCell(ft.Row([btn_abonar, btn_dev_envases, btn_edit_lim], spacing=4)),
+                        ft.DataCell(ft.Row(acciones, spacing=4)),
                     ]
                 )
             )
         self.pagina.update()
-
+    
     def abrir_modal_abono(self, id_cliente: int, nombre: str, deuda: float):
         self.id_cliente_activo = id_cliente
         self.deuda_actual = deuda

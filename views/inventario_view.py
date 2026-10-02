@@ -20,10 +20,11 @@ class InventarioView(ft.Container):
     envases retornables y categorías.
     """
 
-    def __init__(self, page: ft.Page, mostrar_mensaje: Callable[[str, str], None]):
+    def __init__(self, page: ft.Page, mostrar_mensaje: Callable[[str, str], None], es_admin:bool = True,):
         super().__init__(expand=True, padding=10)
         self.pagina = page
         self.mostrar_mensaje = mostrar_mensaje
+        self.es_admin = es_admin
 
         # Estado interno
         self.id_producto_editar: Optional[int] = None
@@ -199,17 +200,22 @@ class InventarioView(ft.Container):
             width=220,
         )
 
+        btn_nuevo_prod = ft.Button(
+            "Nuevo Producto",
+            icon=ft.Icons.ADD,
+            style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
+            visible=self.es_admin,
+            on_click=lambda e: self.abrir_modal_nuevo(),
+        )
+
+        titulo_vista = "Inventario de Productos" if self.es_admin else "Consulta de Precios y Existencias"
+
         self.content = ft.Column(
             [
                 ft.Row(
                     [
-                        ft.Text("Inventario de Productos", size=22, weight=ft.FontWeight.BOLD),
-                        ft.Button(
-                            "Nuevo Producto",
-                            icon=ft.Icons.ADD,
-                            style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
-                            on_click=lambda e: self.abrir_modal_nuevo(),
-                        ),
+                        ft.Text(titulo_vista, size=22, weight=ft.FontWeight.BOLD),
+                        btn_nuevo_prod,
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
@@ -339,66 +345,88 @@ class InventarioView(ft.Container):
                 else ft.Text("No aplica", size=12, color=ft.Colors.GREY_600)
             )
 
-            btn_editar = ft.IconButton(
-                icon=ft.Icons.EDIT_OUTLINED,
-                icon_color=ft.Colors.BLUE_600,
-                tooltip="Editar producto",
-                on_click=lambda e, p=prod: self.abrir_modal_editar(p),
-            )
+            # Celdas base (visibles para cualquier rol)
+            celdas = [
+                ft.DataCell(ft.Text(codigo)),
+                ft.DataCell(ft.Text(f"📦 {nombre}" if es_paquete else nombre, weight=ft.FontWeight.BOLD)),
+                ft.DataCell(ft.Text(cat_nombre)),
+            ]
 
-            btn_estado = ft.IconButton(
-                icon=ft.Icons.VISIBILITY_OFF_OUTLINED if es_activo else ft.Icons.CHECK_CIRCLE_OUTLINE,
-                icon_color=ft.Colors.RED_500 if es_activo else ft.Colors.GREEN_600,
-                tooltip="Descontinuar" if es_activo else "Reactivar",
-                on_click=lambda e, p=prod, a=es_activo: self._alternar_estado_producto(p["id_producto"], a),
-            )
+            # Precio Costo solo visible para Administrador
+            if self.es_admin:
+                celdas.append(ft.DataCell(ft.Text(f"${prod['precio_costo']:.2f}")))
 
-            badge_estado = ft.Container(
-                content=ft.Text("Activo" if es_activo else "Descontinuado", size=12, color=ft.Colors.WHITE),
-                bgcolor=ft.Colors.GREEN_700 if es_activo else ft.Colors.GREY_600,
-                padding=6,
-                border_radius=10,
-            )
-
-            filas_nuevas.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(codigo)),
-                        ft.DataCell(ft.Text(f"📦 {nombre}" if es_paquete else nombre, weight=ft.FontWeight.BOLD)),
-                        ft.DataCell(ft.Text(cat_nombre)),
-                        ft.DataCell(ft.Text(f"${prod['precio_costo']:.2f}")),
-                        ft.DataCell(ft.Text(f"${prod['precio_venta']:.2f}")),
-                        ft.DataCell(badge_envase),
-                        ft.DataCell(
-                            ft.Container(
-                                content=ft.Text(
-                                    stock_texto,
-                                    color=ft.Colors.WHITE if es_stock_bajo else ft.Colors.BLACK,
-                                    weight=ft.FontWeight.BOLD if es_stock_bajo else ft.FontWeight.NORMAL,
-                                ),
-                                bgcolor=ft.Colors.RED_600 if es_stock_bajo else None,
-                                padding=4 if es_stock_bajo else 0,
-                                border_radius=4,
-                            )
+            celdas.extend([
+                ft.DataCell(ft.Text(f"${prod['precio_venta']:.2f}")),
+                ft.DataCell(badge_envase),
+                ft.DataCell(
+                    ft.Container(
+                        content=ft.Text(
+                            stock_texto,
+                            color=ft.Colors.WHITE if es_stock_bajo else ft.Colors.BLACK,
+                            weight=ft.FontWeight.BOLD if es_stock_bajo else ft.FontWeight.NORMAL,
                         ),
-                        ft.DataCell(badge_estado),
-                        ft.DataCell(ft.Row([btn_editar, btn_estado], spacing=0)),
-                    ]
-                )
-            )
+                        bgcolor=ft.Colors.RED_600 if es_stock_bajo else None,
+                        padding=4 if es_stock_bajo else 0,
+                        border_radius=4,
+                    )
+                ),
+            ])
 
-        tabla = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Código", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Producto", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Categoría", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("P. Costo", weight=ft.FontWeight.BOLD), numeric=True),
-                ft.DataColumn(ft.Text("P. Venta", weight=ft.FontWeight.BOLD), numeric=True),
-                ft.DataColumn(ft.Text("Envase / Garantía", weight=ft.FontWeight.BOLD)),
-                ft.DataColumn(ft.Text("Stock Disp.", weight=ft.FontWeight.BOLD), numeric=True),
+            # Estado y botones de edición solo visibles para Administrador
+            if self.es_admin:
+                btn_editar = ft.IconButton(
+                    icon=ft.Icons.EDIT_OUTLINED,
+                    icon_color=ft.Colors.BLUE_600,
+                    tooltip="Editar producto",
+                    on_click=lambda e, p=prod: self.abrir_modal_editar(p),
+                )
+
+                btn_estado = ft.IconButton(
+                    icon=ft.Icons.VISIBILITY_OFF_OUTLINED if es_activo else ft.Icons.CHECK_CIRCLE_OUTLINE,
+                    icon_color=ft.Colors.RED_500 if es_activo else ft.Colors.GREEN_600,
+                    tooltip="Descontinuar" if es_activo else "Reactivar",
+                    on_click=lambda e, p=prod, a=es_activo: self._alternar_estado_producto(p["id_producto"], a),
+                )
+
+                badge_estado = ft.Container(
+                    content=ft.Text("Activo" if es_activo else "Descontinuado", size=12, color=ft.Colors.WHITE),
+                    bgcolor=ft.Colors.GREEN_700 if es_activo else ft.Colors.GREY_600,
+                    padding=6,
+                    border_radius=10,
+                )
+
+                celdas.extend([
+                    ft.DataCell(badge_estado),
+                    ft.DataCell(ft.Row([btn_editar, btn_estado], spacing=0)),
+                ])
+
+            filas_nuevas.append(ft.DataRow(cells=celdas))
+
+        # Configuración dinámica de columnas según permisos
+        columnas = [
+            ft.DataColumn(ft.Text("Código", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("Producto", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("Categoría", weight=ft.FontWeight.BOLD)),
+        ]
+
+        if self.es_admin:
+            columnas.append(ft.DataColumn(ft.Text("P. Costo", weight=ft.FontWeight.BOLD), numeric=True))
+
+        columnas.extend([
+            ft.DataColumn(ft.Text("P. Venta", weight=ft.FontWeight.BOLD), numeric=True),
+            ft.DataColumn(ft.Text("Envase / Garantía", weight=ft.FontWeight.BOLD)),
+            ft.DataColumn(ft.Text("Stock Disp.", weight=ft.FontWeight.BOLD), numeric=True),
+        ])
+
+        if self.es_admin:
+            columnas.extend([
                 ft.DataColumn(ft.Text("Estado", weight=ft.FontWeight.BOLD)),
                 ft.DataColumn(ft.Text("Acciones", weight=ft.FontWeight.BOLD)),
-            ],
+            ])
+
+        tabla = ft.DataTable(
+            columns=columnas,
             rows=filas_nuevas,
             column_spacing=20,
             horizontal_margin=10,
