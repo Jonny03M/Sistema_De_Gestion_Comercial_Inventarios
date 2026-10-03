@@ -57,32 +57,38 @@ class PosController:
         self.descuento_puntos: Decimal = Decimal("0.00")
         self.puntos_a_canjear: int = 0
 
-    def agregar_producto(self, producto: sqlite3.Row):
+    def agregar_producto(self, producto: sqlite3.Row, cantidad: float = 1.0):
         keys = producto.keys() if hasattr(producto, "keys") else producto
         p_id = producto["id_producto"]
+        cant_decimal = Decimal(str(round(cantidad, 3)))
 
-        # Si ya existe, se suma 1 unidad
+        # Si ya existe, se suma la cantidad proporcionada
         for item in self.carrito:
             if item.id_producto == p_id:
-                item.cantidad += Decimal("1.0")
+                item.cantidad += cant_decimal
                 return
 
         es_ret = bool(producto["es_retornable"]) if "es_retornable" in keys and producto["es_retornable"] else False
         p_env = a_decimal(producto["precio_envase"]) if "precio_envase" in keys and producto["precio_envase"] else Decimal("0.00")
         factor = int(producto["factor_conversion"]) if "factor_conversion" in keys and producto["factor_conversion"] else 1
+        unidad = str(producto["unidad_medida"]) if "unidad_medida" in keys and producto["unidad_medida"] else "pza"
 
         nuevo_item = ItemCarrito(
             id_producto=p_id,
             nombre=producto["nombre"],
             precio_unitario=a_decimal(producto["precio_venta"]),
-            cantidad=Decimal("1.0"),
+            cantidad=cant_decimal,
             es_retornable=es_ret,
             envases_por_unidad=factor,
             precio_envase_unitario=p_env,
             envases_a_cobrar=0,
         )
-        self.carrito.append(nuevo_item)
 
+        # Asignar unidad de medida al item si tu clase ItemCarrito lo soporta o como atributo dinámico
+        nuevo_item.unidad_medida = unidad
+
+        self.carrito.append(nuevo_item)
+        
     def incrementar_cantidad(self, index: int):
         if 0 <= index < len(self.carrito):
             self.carrito[index].cantidad += Decimal("1.0")

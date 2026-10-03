@@ -8,7 +8,7 @@ from controllers.pos_controller import PosController, a_decimal
 from database.clientes_db import buscar_cliente_por_telefono, registrar_cliente_rapido
 from database.productos_db import buscar_producto_por_codigo_o_nombre
 from database.ventas_db import registrar_movimiento_caja
-
+from components.modal_granel import ModalVentaGranel
 
 class PosView(ft.Container):
     """Vista modular del Punto de Venta (POS) con manejo de carrito transaccional,
@@ -34,6 +34,10 @@ class PosView(ft.Container):
         self._crear_modales()
         self._construir_ui()
         self._configurar_atajos_teclado()
+        self.modal_granel = ModalVentaGranel(
+            page=self.pagina,
+            al_confirmar=self._agregar_producto_granel_al_carrito,
+        )
 
     def _crear_tabla_carrito(self):
         self.tabla_carrito = ft.DataTable(
@@ -42,7 +46,7 @@ class PosView(ft.Container):
                 ft.DataColumn(ft.Text("Precio U."), numeric=True),
                 ft.DataColumn(ft.Text("Cant."), numeric=True),
                 ft.DataColumn(ft.Text("Subtotal"), numeric=True),
-                ft.DataColumn(ft.Text("Envase / Casco")),
+                ft.DataColumn(ft.Text("Envase")),
                 ft.DataColumn(ft.Text("Acción")),
             ],
             rows=[],
@@ -61,7 +65,7 @@ class PosView(ft.Container):
         )
 
     def _crear_modales(self):
-        # 1. MODAL SALIDA DE CAJA
+        # MODAL SALIDA DE CAJA
         self.txt_monto_gasto = ft.TextField(
             label="Monto a Retirar ($) *",
             keyboard_type=ft.KeyboardType.NUMBER,
@@ -89,7 +93,7 @@ class PosView(ft.Container):
             self.txt_motivo_gasto,
         ])
 
-        # 2. MODAL ENVASES DE PAQUETE / REJA
+        # MODAL ENVASES DE PAQUETE / REJA
         self.lbl_envase_prod = ft.Text("", weight=ft.FontWeight.BOLD, size=15)
         self.lbl_envase_unitario = ft.Text("", size=13, color=ft.Colors.GREY_700)
         self.lbl_envase_max = ft.Text("", size=12, color=ft.Colors.BLUE_900)
@@ -134,7 +138,7 @@ class PosView(ft.Container):
             self.txt_cant_envases_cobrar,
         ])
 
-        # 3. MODAL DE COBRO FINAL
+        # MODAL DE COBRO FINAL
         self.rg_metodo_pago = ft.RadioGroup(
             content=ft.Row([
                 ft.Radio(value="Efectivo", label="Efectivo"),
@@ -284,11 +288,19 @@ class PosView(ft.Container):
         )
 
     def _al_seleccionar_producto_buscador(self, prod):
-        self.pos_controller.agregar_producto(prod)
-        self.actualizar_carrito_ui()
-        self.buscador_pos.txt_buscar.autofocus = True
-        self.pagina.update()
+        """Maneja la selección desde el buscador o lector de código."""
+        if not prod:
+            return
 
+        prod_dict = dict(prod) if not isinstance(prod, dict) else prod
+
+        if hasattr(self, "txt_buscador"):
+            self.txt_buscador.value = ""
+            self.txt_buscador.focus()
+
+        self._procesar_producto_para_carrito(prod_dict)
+
+    
     def actualizar_carrito_ui(self):
         self.tabla_carrito.rows.clear()
 
@@ -341,7 +353,86 @@ class PosView(ft.Container):
         self.lbl_total.value = f"${self.pos_controller.total_bruto:.2f}"
         self.lbl_items.value = f"{self.pos_controller.total_articulos} artículo(s) en carrito"
         self.pagina.update()
+    
 
+    def actualizar_carrito_ui(self):
+        self.tabla_carrito.rows.clear()
+
+        for idx, item in enumerate(self.pos_controller.carrito):
+            # Detectar si el artículo se vende por peso
+            unidad = str(getattr(item, "unidad_medida", "")).lower()
+            es_granel = any(k in unidad for k in ["kilo", "kg", "gramo", "lt", "litro"])
+
+            # Formato de la cantidad (3 decimales si es granel o float)
+            cant_val = float(item.cantidad)
+            txt_cant = f"{cant_val:.3f} kg" if es_granel else (f"{int(cant_val)}" if cant_val.is_integer() else f"{cant_val:.2f}")
+
+            # Botones estándar
+            btn_restar = ft.IconButton(
+                icon=ft.Icons.REMOVE_CIRCLE_OUTLINED,
+                icon_color=ft.Colors.ORANGE_700,
+                on_click=lambda e, i=idx: (self.pos_controller.decrementar_cantidad(i), self.actualizar_carrito_ui()),
+            )
+            btn_sumar = ft.IconButton(
+                icon=ft.Icons.ADD_CIRCLE_OUTLINED,
+                icon_color=ft.Colors.GREEN_700,
+                on_click=lambda e, i=idx: (self.pos_controller.incrementar_cantidad(i), self.actualizar_carrito_ui()),
+            )
+            btn_eliminar = ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE,
+                icon_color=ft.Colors.RED_400,
+                on_click=lambda e, i=idx: (self.pos_controller.eliminar_item(i), self.actualizar_carrito_ui()),
+            )
+
+            # Botón de báscula si es producto por peso
+            btn_pesar = ft.IconButton(
+                icon=ft.Icons.SCALE,
+                icon_color=ft.Colors.BLUE_700,
+                tooltip="Ajustar peso / importe ($)",
+                on_click=lambda e, prod=item, i=idx: self._abrir_granel_para_item(prod, i),
+            ) if es_granel else None
+
+            # Manejo de retornables
+            if item.es_retornable:
+                cant_c = item.envases_a_cobrar
+                tot_dep = item.costo_total_envases
+                txt_btn = f"+${tot_dep:.2f} ({cant_c} env)" if cant_c > 0 else "Trajo Envase ($0)"
+                btn_env = ft.Button(
+                    txt_btn,
+                    icon=ft.Icons.WINE_BAR,
+                    style=ft.ButtonStyle(
+                        bgcolor=ft.Colors.ORANGE_800 if cant_c > 0 else ft.Colors.BLUE_GREY_600,
+                        color=ft.Colors.WHITE,
+                    ),
+                    on_click=lambda e, i=idx: self._click_envase(i),
+                )
+            else:
+                btn_env = ft.Text("—", color=ft.Colors.GREY_500)
+
+            # Lista de botones de acción
+            acciones_fila = [btn_restar, btn_sumar]
+            if btn_pesar:
+                acciones_fila.insert(0, btn_pesar)
+            acciones_fila.append(btn_eliminar)
+
+            self.tabla_carrito.rows.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(item.nombre)),
+                        ft.DataCell(ft.Text(f"${item.precio_unitario:.2f}")),
+                        ft.DataCell(ft.Text(txt_cant, weight=ft.FontWeight.BOLD if es_granel else ft.FontWeight.NORMAL)),
+                        ft.DataCell(ft.Text(f"${item.subtotal_articulos:.2f}")),
+                        ft.DataCell(btn_env),
+                        ft.DataCell(ft.Row(acciones_fila, spacing=0)),
+                    ]
+                )
+            )
+
+        self.lbl_total.value = f"${self.pos_controller.total_bruto:.2f}"
+        self.lbl_items.value = f"{self.pos_controller.total_articulos} artículo(s) en carrito"
+        self.pagina.update()
+
+    
     def _click_envase(self, index: int):
         item = self.pos_controller.carrito[index]
         if item.max_envases_posibles == 1:
@@ -503,3 +594,59 @@ class PosView(ft.Container):
                 self.pagina.update()
 
         self.pagina.on_keyboard_event = on_teclado
+
+    def _agregar_producto_detectado(self, producto: dict):
+        """Determina si se agrega por unidad normal o si requiere pesaje."""
+        unidad = str(producto.get("unidad_medida", "")).lower()
+        es_a_granel = producto.get("a_granel") == 1 or unidad in ["kg", "kilo", "kilogramo", "gramo", "lt", "litro"]
+
+        if es_a_granel:
+            self.modal_granel.abrir(producto)
+        else:
+            self._agregar_al_carrito(producto, cantidad=1.0)
+
+    
+    def _procesar_producto_para_carrito(self, producto):
+        """Si el producto se vende por peso/granel, abre la báscula; si no, agrega 1 unidad."""
+        if not producto:
+            return
+
+        prod_dict = dict(producto) if not isinstance(producto, dict) else producto
+
+        # Leemos 'tipo_unidad' que es el campo real de tu base de datos
+        unidad = str(prod_dict.get("tipo_unidad") or prod_dict.get("unidad_medida") or "").lower()
+
+        # Detección: si contiene kg, kilo, gramo, lt o litro
+        es_granel = any(u in unidad for u in ["kilo", "kg", "gramo", "gr", "lt", "litro"])
+
+        if es_granel:
+            self.modal_granel.abrir(prod_dict)
+        else:
+            self.pos_controller.agregar_producto(prod_dict, cantidad=1.0)
+            self.actualizar_carrito_ui()
+    
+    def _abrir_granel_para_item(self, item, indice_carrito: int):
+        """Abre el modal de báscula para modificar un producto que ya está en el carrito."""
+        prod_dict = {
+            "id_producto": item.id_producto,
+            "nombre": item.nombre,
+            "precio_venta": item.precio_unitario,
+            "unidad_medida": getattr(item, "unidad_medida", "kg"),
+            "indice_carrito": indice_carrito,
+        }
+        self.modal_granel.abrir(prod_dict)
+
+    
+    def _agregar_producto_granel_al_carrito(self, producto: dict, peso: float, importe: float):
+        """Aplica la cantidad calculada por peso o importe."""
+        if "indice_carrito" in producto:
+            from decimal import Decimal
+            idx = producto["indice_carrito"]
+            self.pos_controller.carrito[idx].cantidad = Decimal(str(round(peso, 3)))
+            self.pos_controller.recalcular_totales()
+        else:
+            self.pos_controller.agregar_producto(producto, cantidad=round(peso, 3))
+
+        self.actualizar_carrito_ui()
+        self.mostrar_mensaje(f"Agregado: {producto.get('nombre', '')} ({peso:.3f} kg)", "green")
+    
