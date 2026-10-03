@@ -9,7 +9,7 @@ from database.ventas_db import (
     obtener_ventas_por_rango,
 )
 from database.turnos_db import obtener_historial_cortes
-
+from services.ticket_service import TicketService
 
 class ReportesView(ft.Container):
     """Vista modular para cortes de caja, resumen financiero e historial de tickets."""
@@ -25,6 +25,7 @@ class ReportesView(ft.Container):
         self._construir_ui()
         self.cargar_datos_corte()
         self._construir_seccion_cortes()
+        self.ticket_service = TicketService()
         
 
     def _crear_kpis(self):
@@ -289,11 +290,20 @@ class ReportesView(ft.Container):
         ventas = obtener_ventas_por_rango(f_ini, f_fin)
 
         for v in ventas:
+            id_venta = v["id_venta"]
+
             btn_ver = ft.IconButton(
                 icon=ft.Icons.VISIBILITY,
                 icon_color=ft.Colors.BLUE_700,
                 tooltip="Ver desglose del ticket",
                 on_click=lambda e, id_v=v["id_venta"]: self.abrir_detalle_ticket(id_v),
+            )
+
+            btn_imprimir = ft.IconButton(
+                icon = ft.Icons.PRINT,
+                icon_color = ft.Colors.TEAL_700,
+                tooltip="Reimprimir ticket", 
+                on_click= lambda e, id_v = id_venta: self._reimprimir_ticket(id_v),
             )
 
             color_metodo = ft.Colors.BLUE_700
@@ -318,7 +328,13 @@ class ReportesView(ft.Container):
                             )
                         ),
                         ft.DataCell(ft.Text(f"${v['total']:.2f}", weight=ft.FontWeight.BOLD)),
-                        ft.DataCell(btn_ver),
+                        ft.DataCell(
+                            ft.Row(
+                                [btn_ver, btn_imprimir],
+                                spacing=0,
+                                alignment=ft.MainAxisAlignment.START,
+                            )
+                        ),
                     ]
                 )
             )
@@ -606,3 +622,76 @@ class ReportesView(ft.Container):
             scroll=ft.ScrollMode.AUTO,
             expand=True,
         )
+
+    def _reimprimir_ticket(self, id_venta: int):
+        """Genera el ticket de la venta seleccionada y abre el modal de vista previa/impresión."""
+        try:
+            self.ticket_service.recargar_configuracion()
+            texto_ticket = self.ticket_service.generar_ticket_desde_id(id_venta)
+            if not texto_ticket:
+                self.mostrar_mensaje(f"⚠ No se pudo generar el ticket para la venta #{id_venta}", ft.Colors.ORANGE_800)
+                return
+
+            def cerrar_dialogo(e=None):
+                try:
+                    self.pagina.close(dlg)
+                except Exception:
+                    dlg.open = False
+                    self.pagina.update()
+
+            borde_box = None
+            if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+                borde_box = ft.Border.all(1, ft.Colors.GREY_300)
+
+            dlg = ft.AlertDialog(
+                modal=True,
+                title=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.PRINT, color=ft.Colors.BLUE_700),
+                        ft.Text(f"Reimpresión - Ticket #{id_venta}", size=18, weight=ft.FontWeight.BOLD),
+                    ],
+                    spacing=8,
+                ),
+                content=ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Text(
+                                texto_ticket,
+                                font_family="Courier New",
+                                size=12,
+                                selectable=True,
+                            )
+                        ],
+                        scroll=ft.ScrollMode.ADAPTIVE,
+                        tight=True,
+                    ),
+                    width=340,
+                    height=380,
+                    border=borde_box,
+                    border_radius=8,
+                    padding=10,
+                    bgcolor=ft.Colors.GREY_50,
+                ),
+                actions=[
+                    ft.TextButton("Cerrar (Esc)", on_click=cerrar_dialogo),
+                    ft.Button(
+                        "Imprimir Copia",
+                        icon=ft.Icons.PRINT,
+                        style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
+                        on_click=lambda e: (self.ticket_service.imprimir_ticket(texto_ticket), cerrar_dialogo()),
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+
+            try:
+                self.pagina.open(dlg)
+            except Exception:
+                if dlg not in self.pagina.overlay:
+                    self.pagina.overlay.append(dlg)
+                dlg.open = True
+                self.pagina.update()
+
+        except Exception as err:
+            print(f"[Error Reimprimiendo Ticket] {err}")
+            self.mostrar_mensaje(f"Error al reimprimir ticket: {err}", ft.Colors.RED_600)
