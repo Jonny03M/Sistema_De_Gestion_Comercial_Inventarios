@@ -171,7 +171,25 @@ def inicializar_base_datos():
             FOREIGN KEY (id_empleado) REFERENCES empleados(id_empleado)
         );
 
+        -- 15. CONTROL DE TURNOS Y CORTE CIEGO
+        CREATE TABLE IF NOT EXISTS turnos_caja (
+            id_turno INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_empleado INTEGER NOT NULL,
+            fecha_apertura DATETIME DEFAULT (datetime('now', 'localtime')),
+            monto_inicial REAL NOT NULL DEFAULT 0.0,
+            fecha_cierre DATETIME,
+            ventas_efectivo REAL DEFAULT 0.0,
+            salidas_efectivo REAL DEFAULT 0.0,
+            monto_esperado REAL DEFAULT 0.0,
+            monto_declarado REAL DEFAULT 0.0,
+            diferencia REAL DEFAULT 0.0,
+            estado TEXT NOT NULL DEFAULT 'Abierto',
+            observaciones TEXT DEFAULT '',
+            FOREIGN KEY (id_empleado) REFERENCES empleados(id_empleado)
+        );
+
         -- ÍNDICES DE RENDIMIENTO
+        CREATE INDEX IF NOT EXISTS idx_turnos_estado ON turnos_caja(estado);
         CREATE INDEX IF NOT EXISTS idx_productos_codigo ON productos(codigo_barras);
         CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos(nombre);
         CREATE INDEX IF NOT EXISTS idx_ventas_fecha ON ventas(fecha_hora);

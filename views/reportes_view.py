@@ -8,7 +8,7 @@ from database.ventas_db import (
     obtener_resumen_corte_por_rango,
     obtener_ventas_por_rango,
 )
-
+from database.turnos_db import obtener_historial_cortes
 
 class ReportesView(ft.Container):
     """Vista modular para cortes de caja, resumen financiero e historial de tickets."""
@@ -23,6 +23,7 @@ class ReportesView(ft.Container):
         self._crear_modal_ticket()
         self._construir_ui()
         self.cargar_datos_corte()
+        self._construir_seccion_cortes()
 
     def _crear_kpis(self):
         self.lbl_total_dia = ft.Text("$0.00", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
@@ -295,3 +296,63 @@ class ReportesView(ft.Container):
             )
 
         self.modal_ticket.abrir()
+
+    def _construir_seccion_cortes(self) -> ft.Control:
+        cortes = obtener_historial_cortes(limite=30)
+        filas = []
+
+        for c in cortes:
+            dif = float(c["diferencia"] or 0.0)
+            if dif < 0:
+                color_dif = ft.Colors.RED_700
+                texto_dif = f"-${abs(dif):.2f} (Faltante)"
+            elif dif > 0:
+                color_dif = ft.Colors.BLUE_700
+                texto_dif = f"+${dif:.2f} (Sobrante)"
+            else:
+                color_dif = ft.Colors.GREEN_700
+                texto_dif = "Exacto ($0.00)"
+
+            filas.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(ft.Text(f"#{c['id_turno']}")),
+                        ft.DataCell(ft.Text(c["cajero"], weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(c["fecha_apertura"] or "—")),
+                        ft.DataCell(ft.Text(c["fecha_cierre"] or "Abierto")),
+                        ft.DataCell(ft.Text(f"${c['monto_inicial']:.2f}")),
+                        ft.DataCell(ft.Text(f"${c['ventas_efectivo']:.2f}")),
+                        ft.DataCell(ft.Text(f"${c['salidas_efectivo']:.2f}")),
+                        ft.DataCell(ft.Text(f"${c['monto_esperado']:.2f}", weight=ft.FontWeight.BOLD)),
+                        ft.DataCell(ft.Text(f"${c['monto_declarado']:.2f}")),
+                        ft.DataCell(
+                            ft.Text(texto_dif, color=color_dif, weight=ft.FontWeight.BOLD)
+                        ),
+                    ]
+                )
+            )
+
+        tabla = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("#")),
+                ft.DataColumn(ft.Text("Cajero")),
+                ft.DataColumn(ft.Text("Apertura")),
+                ft.DataColumn(ft.Text("Cierre")),
+                ft.DataColumn(ft.Text("Fondo Inicial")),
+                ft.DataColumn(ft.Text("Ventas Efec.")),
+                ft.DataColumn(ft.Text("Salidas")),
+                ft.DataColumn(ft.Text("Esperado")),
+                ft.DataColumn(ft.Text("Declarado")),
+                ft.DataColumn(ft.Text("Diferencia")),
+            ],
+            rows=filas,
+            column_spacing=14,
+        )
+
+        return ft.Column(
+            [
+                ft.Text("Auditoría de Cortes y Entregas de Turno", size=18, weight=ft.FontWeight.BOLD),
+                ft.Row([tabla], scroll=ft.ScrollMode.AUTO),
+            ],
+            spacing=10,
+        )
