@@ -70,15 +70,11 @@ def inicializar_base_datos():
             saldo_pendiente REAL DEFAULT 0.0
         );
 
-        -- 6. CONFIGURACION DEL MONEDERO
+        -- 6. CONFIGURACION GLOBAL DEL SISTEMA
         CREATE TABLE IF NOT EXISTS configuracion (
             clave TEXT PRIMARY KEY,
             valor TEXT NOT NULL
         );
-
-        INSERT OR IGNORE INTO configuracion (clave, valor) VALUES 
-        ('monto_por_punto', '10.0'),
-        ('valor_peso_por_punto', '0.10');
 
         -- 7. PROVEEDORES
         CREATE TABLE IF NOT EXISTS proveedores (
@@ -95,6 +91,8 @@ def inicializar_base_datos():
             total REAL NOT NULL,
             metodo_pago TEXT NOT NULL,
             puntos_canjeados INTEGER DEFAULT 0,
+            efectivo_recibido REAL DEFAULT 0.0,
+            cambio REAL DEFAULT 0.0,
             estado TEXT NOT NULL DEFAULT 'Completada',
             id_empleado INTEGER NOT NULL,
             id_cliente INTEGER,
@@ -110,6 +108,7 @@ def inicializar_base_datos():
             cantidad REAL NOT NULL,
             precio_unitario REAL NOT NULL,
             subtotal REAL NOT NULL,
+            envases_cobrados INTEGER DEFAULT 0,
             FOREIGN KEY (id_venta) REFERENCES ventas(id_venta) ON DELETE CASCADE,
             FOREIGN KEY (id_producto) REFERENCES productos(id_producto)
         );
@@ -183,6 +182,7 @@ def inicializar_base_datos():
         conexion.executescript(script_sql)
         cursor = conexion.cursor()
 
+        # Semilla: Administrador Inicial
         password_admin_hash = hash_password("admin123")
         cursor.execute(
             """
@@ -192,11 +192,32 @@ def inicializar_base_datos():
             (password_admin_hash,),
         )
 
+        # Semilla: Categoría General
         cursor.execute(
             """
             INSERT OR IGNORE INTO categorias (id_categoria, nombre, descripcion)
             VALUES (1, 'General', 'Productos sin categoría específica')
             """
+        )
+
+        # Semilla: Configuraciones iniciales por defecto
+        configs_default = [
+            ("nombre_tienda", "MI TIENDA DE ABARROTES"),
+            ("direccion_tienda", "Puebla, México"),
+            ("telefono_tienda", "Tel: 222-000-0000"),
+            ("monto_por_punto", "10.0"),
+            ("valor_peso_por_punto", "0.10"),
+            ("modulo_puntos", "true"),
+            ("modulo_envases", "true"),
+            ("imprimir_tickets_auto", "false"),
+            ("ancho_ticket", "32"),
+        ]
+
+        cursor.executemany(
+            """
+            INSERT OR IGNORE INTO configuracion (clave, valor) VALUES (?, ?);
+            """,
+            configs_default,
         )
 
         conexion.commit()

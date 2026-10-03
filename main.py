@@ -9,6 +9,7 @@ from views.inventario_view import InventarioView
 from views.pos_view import PosView
 from views.reportes_view import ReportesView
 from database.backup_service import generar_respaldo_automatico
+from views.configuracion_view import ConfiguracionView
 
 
 def main(page: ft.Page):
@@ -23,7 +24,14 @@ def main(page: ft.Page):
 
     auth = AuthController()
 
-    def mostrar_mensaje(texto: str, color_fondo: str):
+    def mostrar_mensaje(texto: str, color_fondo: str = ft.Colors.BLUE_700):
+        # Cerrar o remover SnackBar previo que siga activo en el overlay
+        for control in list(page.overlay):
+            if isinstance(control, ft.SnackBar):
+                control.open = False
+                page.overlay.remove(control)
+        page.update()
+
         snack = ft.SnackBar(
             content=ft.Text(texto, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
             bgcolor=color_fondo,
@@ -32,11 +40,11 @@ def main(page: ft.Page):
             show_close_icon=True,
             close_icon_color=ft.Colors.WHITE,
         )
+
         try:
             page.open(snack)
         except Exception:
-            if snack not in page.overlay:
-                page.overlay.append(snack)
+            page.overlay.append(snack)
             snack.open = True
             page.update()
 
@@ -125,6 +133,7 @@ def main(page: ft.Page):
                 ft.NavigationRailDestination(icon=ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED, label="Créditos / Envases"),
                 ft.NavigationRailDestination(icon=ft.Icons.ASSESSMENT, label="Reportes"),
                 ft.NavigationRailDestination(icon=ft.Icons.GROUP, label="Usuarios"),
+                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="Configuración"),
             ]
         else:
             destinos = [
@@ -161,7 +170,10 @@ def main(page: ft.Page):
             elif indice == 5 and auth.es_admin:
                 page.on_keyboard_event = None
                 contenedor_principal.content = EmpleadosView(page, mostrar_mensaje)
-
+            elif indice == 6 and auth.es_admin:
+                page.on_keyboard_event = None
+                contenedor_principal.content = ConfiguracionView(page, mostrar_mensaje)
+            
             page.update()
 
         rail_navegacion = ft.NavigationRail(

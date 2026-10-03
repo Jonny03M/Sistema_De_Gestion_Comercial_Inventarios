@@ -439,3 +439,52 @@ def obtener_detalle_compra_por_id(id_compra: int) -> dict:
             "compra": dict(compra) if compra else None,
             "detalles": [dict(d) for d in detalles],
         }
+
+def obtener_venta_completa_para_ticket(id_venta: int) -> Optional[dict]:
+    """Recupera la cabecera y los productos de una venta para generar su ticket al vuelo."""
+    with obtener_conexion() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT 
+                v.id_venta,
+                strftime('%d/%m/%Y %I:%M %p', v.fecha_hora) AS fecha_hora,
+                v.total,
+                v.metodo_pago,
+                v.efectivo_recibido,
+                v.cambio,
+                e.nombre || ' ' || e.apellido AS cajero,
+                c.nombre AS cliente
+            FROM ventas v
+            INNER JOIN empleados e ON v.id_empleado = e.id_empleado
+            LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
+            WHERE v.id_venta = ?;
+        """,
+            (id_venta,),
+        )
+        venta = cursor.fetchone()
+
+        if not venta:
+            return None
+
+        cursor.execute(
+            """
+            SELECT 
+                dv.cantidad,
+                p.nombre,
+                dv.precio_unitario,
+                dv.subtotal,
+                COALESCE(dv.envases_cobrados, 0) AS envases_a_cobrar,
+                (COALESCE(dv.envases_cobrados, 0) * COALESCE(p.precio_envase, 0)) AS costo_total_envases
+            FROM detalle_venta dv
+            INNER JOIN productos p ON dv.id_producto = p.id_producto
+            WHERE dv.id_venta = ?;
+        """,
+            (id_venta,),
+        )
+        detalles = cursor.fetchall()
+
+        return {
+            "venta": dict(venta),
+            "detalles": [dict(d) for d in detalles],
+        }
