@@ -9,6 +9,8 @@ from database.clientes_db import buscar_cliente_por_telefono, registrar_cliente_
 from database.productos_db import buscar_producto_por_codigo_o_nombre
 from database.ventas_db import registrar_movimiento_caja
 from components.modal_granel import ModalVentaGranel
+from services.ticket_service import TicketService
+from utils.formato import formatear_stock
 
 class PosView(ft.Container):
     """Vista modular del Punto de Venta (POS) con manejo de carrito transaccional,
@@ -29,6 +31,7 @@ class PosView(ft.Container):
 
         self.pos_controller = PosController()
         self.indice_envase_actual: Optional[int] = None
+        self.ticket_service = TicketService()
 
         self._crear_tabla_carrito()
         self._crear_modales()
@@ -234,7 +237,7 @@ class PosView(ft.Container):
             icono_sugerencia=ft.Icons.SHOPPING_BAG_OUTLINED,
             funcion_busqueda=buscar_producto_por_codigo_o_nombre,
             generador_titulo=lambda p: p["nombre"],
-            generador_subtitulo=lambda p: f"Stock: {p['stock_actual']} {p['tipo_unidad']} | Cód: {p['codigo_barras'] or '—'}",
+            generador_subtitulo=lambda p: f"Stock: {formatear_stock(p['stock_actual'], p['tipo_unidad'] or '')} | Cód: {p['codigo_barras'] or '—'}",
             generador_trailing=lambda p: f"${p['precio_venta']:.2f}",
             al_seleccionar=self._al_seleccionar_producto_buscador,
             permitir_deseleccion=False,
@@ -564,10 +567,15 @@ class PosView(ft.Container):
     def _al_cambiar_puntos(self):
         self.pos_controller.aplicar_canje_puntos(self.txt_canje_puntos.value)
         self._recalcular_cobro_modal()
-
+    
     def _confirmar_venta(self):
         metodo = self.rg_metodo_pago.value
         recibido = self.txt_efectivo_recibido.value or "0.0"
+
+        if metodo == "Efectivo":
+            if a_decimal(recibido) < self.pos_controller.total_neto:
+                self.mostrar_mensaje("⚠ El dinero recibido no cubre el total", ft.Colors.RED_600)
+                return
 
         try:
             id_v = self.pos_controller.procesar_venta(
@@ -578,9 +586,23 @@ class PosView(ft.Container):
             self.modal_cobro.cerrar()
             self.actualizar_carrito_ui()
             self.mostrar_mensaje(f" ¡Venta #{id_v} completada con éxito!", ft.Colors.GREEN_700)
+
+            try:
+                self.ticket_service.recargar_configuracion()
+                texto_ticket = self.ticket_service.generar_ticket_desde_id(id_v)
+
+                if texto_ticket:
+                    if getattr(self.ticket_service, "impresion_auto", False):
+                        self.ticket_service.imprimir_ticket(texto_ticket)
+
+                    self._mostrar_modal_vista_previa_ticket(texto_ticket, id_v)
+            except Exception as e_ticket:
+                print(f"[Error Generando Ticket] {e_ticket}")
+                self.mostrar_mensaje(f"⚠ Venta guardada, pero ocurrió un error con el ticket: {e_ticket}", ft.Colors.ORANGE_800)
+
         except Exception as err:
             self.mostrar_mensaje(f" {err}", ft.Colors.RED_600)
-
+                    
     def _configurar_atajos_teclado(self):
         def on_teclado(e: ft.KeyboardEvent):
             if e.ctrl and e.key in ["Enter", " "]:
@@ -649,4 +671,66 @@ class PosView(ft.Container):
 
         self.actualizar_carrito_ui()
         self.mostrar_mensaje(f"Agregado: {producto.get('nombre', '')} ({peso:.3f} kg)", "green")
-    
+
+    def _mostrar_modal_vista_previa_ticket(self, texto_ticket: str, id_venta: int):
+        """Muestra el diálogo con la vista previa del ticket y opción de imprimir."""
+        def cerrar_dialogo(e=None):
+            try:
+                self.pagina.close(dlg)
+            except Exception:
+                dlg.open = False
+                self.pagina.update()
+
+        # Configurar borde compatible con versiones de Flet
+        borde_box = None
+        if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+            borde_box = ft.Border.all(1, ft.Colors.GREY_300)
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Row(
+                [
+                    ft.Icon(ft.Icons.RECEIPT_LONG, color=ft.Colors.BLUE_700),
+                    ft.Text(f"Ticket de Venta #{id_venta}", size=18, weight=ft.FontWeight.BOLD),
+                ],
+                spacing=8,
+            ),
+            content=ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            texto_ticket,
+                            font_family="Courier New",
+                            size=12,
+                            selectable=True,
+                        )
+                    ],
+                    scroll=ft.ScrollMode.ADAPTIVE,
+                    tight=True,
+                ),
+                width=340,
+                height=380,
+                border=borde_box,
+                border_radius=8,
+                padding=10,
+                bgcolor=ft.Colors.GREY_50,
+            ),
+            actions=[
+                ft.TextButton("Cerrar (Esc)", on_click=cerrar_dialogo),
+                ft.Button(
+                    "Imprimir",
+                    icon=ft.Icons.PRINT,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.GREEN_700, color=ft.Colors.WHITE),
+                    on_click=lambda e: (self.ticket_service.imprimir_ticket(texto_ticket), cerrar_dialogo()),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        try:
+            self.pagina.open(dlg)
+        except Exception:
+            if dlg not in self.pagina.overlay:
+                self.pagina.overlay.append(dlg)
+            dlg.open = True
+            self.pagina.update()

@@ -12,6 +12,7 @@ from database.productos_db import (
     obtener_categorias,
     obtener_todos_los_productos,
 )
+from utils.formato import formatear_stock
 
 
 class InventarioView(ft.Container):
@@ -93,7 +94,7 @@ class InventarioView(ft.Container):
             icono_sugerencia=ft.Icons.LINK,
             funcion_busqueda=self._buscar_productos_base,
             generador_titulo=lambda p: p["nombre"],
-            generador_subtitulo=lambda p: f"Stock: {p['stock_actual']} {p['tipo_unidad']} | Cód: {p['codigo_barras'] or '—'}",
+            generador_subtitulo=lambda p: f"Stock: {formatear_stock(p['stock_actual'], p['tipo_unidad'] or '')} | Cód: {p['codigo_barras'] or '—'}",
             generador_trailing=lambda p: f"${p['precio_venta']:.2f}",
             al_seleccionar=self._al_seleccionar_producto_padre,
             al_limpiar=lambda: setattr(self, "id_producto_base_seleccionado", None),
@@ -314,7 +315,7 @@ class InventarioView(ft.Container):
                 stock_actual = float(prod["stock_actual"] or 0.0)
                 stock_minimo = float(prod["stock_minimo"] or 1.0)
                 es_stock_bajo = es_activo and (stock_actual <= stock_minimo)
-                stock_texto = f"{stock_actual} {prod['tipo_unidad']}"
+                stock_texto = formatear_stock(stock_actual, prod["tipo_unidad"] or "")
 
             nombre = prod["nombre"] or ""
             codigo = prod["codigo_barras"] or "—"
@@ -480,7 +481,7 @@ class InventarioView(ft.Container):
         self.txt_codigo.value = prod["codigo_barras"] or ""
         self.txt_precio_venta.value = str(prod["precio_venta"])
         self.txt_precio_costo.value = str(prod["precio_costo"])
-        self.txt_stock_actual.value = str(prod["stock_actual"])
+        self.txt_stock_actual.value = formatear_stock(prod["stock_actual"], "").strip()
         self.txt_stock_minimo.value = str(prod["stock_minimo"])
         self.dd_tipo_unidad.value = prod["tipo_unidad"]
 

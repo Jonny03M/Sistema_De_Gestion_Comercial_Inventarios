@@ -474,8 +474,8 @@ def obtener_venta_completa_para_ticket(id_venta: int) -> Optional[dict]:
                 p.nombre,
                 dv.precio_unitario,
                 dv.subtotal,
-                COALESCE(dv.envases_cobrados, 0) AS envases_a_cobrar,
-                (COALESCE(dv.envases_cobrados, 0) * COALESCE(p.precio_envase, 0)) AS costo_total_envases
+                0 AS envases_a_cobrar,
+                0.0 AS costo_total_envases
             FROM detalle_venta dv
             INNER JOIN productos p ON dv.id_producto = p.id_producto
             WHERE dv.id_venta = ?;
