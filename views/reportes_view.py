@@ -10,6 +10,7 @@ from database.ventas_db import (
 )
 from database.turnos_db import obtener_historial_cortes
 
+
 class ReportesView(ft.Container):
     """Vista modular para cortes de caja, resumen financiero e historial de tickets."""
 
@@ -24,6 +25,7 @@ class ReportesView(ft.Container):
         self._construir_ui()
         self.cargar_datos_corte()
         self._construir_seccion_cortes()
+        
 
     def _crear_kpis(self):
         self.lbl_total_dia = ft.Text("$0.00", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
@@ -145,16 +147,28 @@ class ReportesView(ft.Container):
         ])
 
     def _construir_ui(self):
-        self.lbl_fecha_mostrada = ft.Text("Periodo: Hoy", size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900)
-        self.selector_fechas = SelectorRangoFechas(page=self.pagina, al_cambiar_rango=self._al_cambiar_periodo)
+        self.lbl_fecha_mostrada = ft.Text(
+            "Periodo: Hoy",
+            size=13,
+            weight=ft.FontWeight.BOLD,
+            color=ft.Colors.BLUE_900,
+        )
+        self.selector_fechas = SelectorRangoFechas(
+            page=self.pagina, al_cambiar_rango=self._al_cambiar_periodo
+        )
 
-        self.content = ft.Column(
+        # 1. Contenedor original de Ventas y Métricas
+        self.vista_ventas = ft.Column(
             [
                 ft.Row(
                     [
                         ft.Column(
                             [
-                                ft.Text("Corte de Caja y Reportes de Venta", size=20, weight=ft.FontWeight.BOLD),
+                                ft.Text(
+                                    "Corte de Caja y Reportes de Venta",
+                                    size=20,
+                                    weight=ft.FontWeight.BOLD,
+                                ),
                                 self.lbl_fecha_mostrada,
                             ],
                             spacing=2,
@@ -170,10 +184,20 @@ class ReportesView(ft.Container):
                 ft.Container(
                     content=ft.Column(
                         [
-                            ft.Text("Historial de Ventas Registradas:", size=15, weight=ft.FontWeight.BOLD),
+                            ft.Text(
+                                "Historial de Ventas Registradas:",
+                                size=15,
+                                weight=ft.FontWeight.BOLD,
+                            ),
                             ft.Container(
                                 content=ft.Column(
-                                    [ft.Row([self.tabla_ventas], scroll=ft.ScrollMode.AUTO, expand=True)],
+                                    [
+                                        ft.Row(
+                                            [self.tabla_ventas],
+                                            scroll=ft.ScrollMode.AUTO,
+                                            expand=True,
+                                        )
+                                    ],
                                     scroll=ft.ScrollMode.AUTO,
                                     expand=True,
                                 ),
@@ -192,6 +216,54 @@ class ReportesView(ft.Container):
             scroll=ft.ScrollMode.AUTO,
             expand=True,
             spacing=8,
+        )
+
+        # 2. Contenedor dinámico que alternará entre Ventas y Turnos
+        self.area_reporte = ft.Container(
+            content=self.vista_ventas,
+            expand=True,
+        )
+
+        # 3. Botones tipo pestaña
+        btn_ventas = ft.Button(
+            "Ventas y Finanzas",
+            icon=ft.Icons.ANALYTICS_OUTLINED,
+            style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_800, color=ft.Colors.WHITE),
+        )
+
+        btn_turnos = ft.Button(
+            "Auditoría de Turnos",
+            icon=ft.Icons.BADGE_OUTLINED,
+            style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=ft.Colors.BLACK87),
+        )
+
+        def mostrar_ventas(e):
+            btn_ventas.style.bgcolor = ft.Colors.BLUE_800
+            btn_ventas.style.color = ft.Colors.WHITE
+            btn_turnos.style.bgcolor = ft.Colors.GREY_200
+            btn_turnos.style.color = ft.Colors.BLACK87
+            self.area_reporte.content = self.vista_ventas
+            self.pagina.update()
+
+        def mostrar_turnos(e):
+            btn_turnos.style.bgcolor = ft.Colors.BLUE_800
+            btn_turnos.style.color = ft.Colors.WHITE
+            btn_ventas.style.bgcolor = ft.Colors.GREY_200
+            btn_ventas.style.color = ft.Colors.BLACK87
+            self.area_reporte.content = self._construir_seccion_turnos()
+            self.pagina.update()
+
+        btn_ventas.on_click = mostrar_ventas
+        btn_turnos.on_click = mostrar_turnos
+
+        # Estructura principal
+        self.content = ft.Column(
+            [
+                ft.Row([btn_ventas, btn_turnos], spacing=10),
+                self.area_reporte,
+            ],
+            expand=True,
+            spacing=14,
         )
 
     def _al_cambiar_periodo(self, f_ini: str, f_fin: str, descripcion: str):
@@ -355,4 +427,182 @@ class ReportesView(ft.Container):
                 ft.Row([tabla], scroll=ft.ScrollMode.AUTO),
             ],
             spacing=10,
+        )
+
+    def _construir_seccion_turnos(self) -> ft.Control:
+        """Genera la tabla interactiva de auditoría de turnos de caja."""
+        cortes = obtener_historial_cortes(limite=50)
+
+        if not cortes:
+            return ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Icon(
+                            ft.Icons.INVENTORY_2_OUTLINED,
+                            size=48,
+                            color=ft.Colors.GREY_400,
+                        ),
+                        ft.Text(
+                            "Aún no hay registros de aperturas o cierres de turno.",
+                            color=ft.Colors.GREY_600,
+                            size=14,
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=40,
+                alignment=ft.alignment.center,
+            )
+
+        filas = []
+        for c in cortes:
+            estado = c.get("estado", "Cerrado")
+            dif = float(c.get("diferencia") or 0.0)
+
+            # Formato y semáforo visual de diferencia
+            if estado == "Abierto":
+                badge_estado = ft.Container(
+                    content=ft.Text(
+                        "En Curso",
+                        color=ft.Colors.WHITE,
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    bgcolor=ft.Colors.GREEN_700,
+                    padding=ft.Padding(8, 3, 8, 3),  # (left, top, right, bottom)
+                    border_radius=12,
+                )
+                txt_dif = ft.Text("—", color=ft.Colors.GREY_600)
+                monto_decl_str = "—"
+                monto_esp_str = "—"
+                fecha_cierre_str = "—"
+            else:
+                badge_estado = ft.Container(
+                    content=ft.Text(
+                        "Cerrado",
+                        color=ft.Colors.WHITE,
+                        size=11,
+                        weight=ft.FontWeight.BOLD,
+                    ),
+                    bgcolor=ft.Colors.BLUE_GREY_700,
+                    padding=ft.Padding(8, 3, 8, 3),  # (left, top, right, bottom)
+                    border_radius=12,
+                )
+                monto_decl_str = f"${float(c.get('monto_declarado') or 0.0):.2f}"
+                monto_esp_str = f"${float(c.get('monto_esperado') or 0.0):.2f}"
+                fecha_cierre_str = c.get("fecha_cierre") or "—"
+
+                if dif < 0:
+                    txt_dif = ft.Text(
+                        f"-${abs(dif):.2f} (Faltante)",
+                        color=ft.Colors.RED_700,
+                        weight=ft.FontWeight.BOLD,
+                    )
+                elif dif > 0:
+                    txt_dif = ft.Text(
+                        f"+${dif:.2f} (Sobrante)",
+                        color=ft.Colors.BLUE_800,
+                        weight=ft.FontWeight.BOLD,
+                    )
+                else:
+                    txt_dif = ft.Text(
+                        "Exacto ($0.00)",
+                        color=ft.Colors.GREEN_700,
+                        weight=ft.FontWeight.BOLD,
+                    )
+
+            filas.append(
+                ft.DataRow(
+                    cells=[
+                        ft.DataCell(
+                            ft.Text(
+                                f"#{c['id_turno']}", weight=ft.FontWeight.BOLD
+                            )
+                        ),
+                        ft.DataCell(ft.Text(c["cajero"])),
+                        ft.DataCell(badge_estado),
+                        ft.DataCell(ft.Text(c.get("fecha_apertura") or "—")),
+                        ft.DataCell(ft.Text(fecha_cierre_str)),
+                        ft.DataCell(
+                            ft.Text(
+                                f"${float(c.get('monto_inicial') or 0.0):.2f}"
+                            )
+                        ),
+                        ft.DataCell(
+                            ft.Text(
+                                f"${float(c.get('ventas_efectivo') or 0.0):.2f}"
+                            )
+                        ),
+                        ft.DataCell(
+                            ft.Text(
+                                f"${float(c.get('salidas_efectivo') or 0.0):.2f}"
+                            )
+                        ),
+                        ft.DataCell(
+                            ft.Text(monto_esp_str, weight=ft.FontWeight.BOLD)
+                        ),
+                        ft.DataCell(ft.Text(monto_decl_str)),
+                        ft.DataCell(txt_dif),
+                        ft.DataCell(
+                            ft.Text(
+                                c.get("observaciones") or "—",
+                                max_lines=1,
+                                overflow=ft.TextOverflow.ELLIPSIS,
+                            )
+                        ),
+                    ]
+                )
+            )
+
+        tabla = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("#")),
+                ft.DataColumn(ft.Text("Cajero")),
+                ft.DataColumn(ft.Text("Estado")),
+                ft.DataColumn(ft.Text("Apertura")),
+                ft.DataColumn(ft.Text("Cierre")),
+                ft.DataColumn(ft.Text("Fondo Inicial")),
+                ft.DataColumn(ft.Text("Ventas Efectivo")),
+                ft.DataColumn(ft.Text("Salidas")),
+                ft.DataColumn(ft.Text("Esperado en Caja")),
+                ft.DataColumn(ft.Text("Declarado")),
+                ft.DataColumn(ft.Text("Auditoría / Dif.")),
+                ft.DataColumn(ft.Text("Notas")),
+            ],
+            rows=filas,
+            column_spacing=18,
+            horizontal_margin=12,
+            border=ft.Border.all(1, ft.Colors.GREY_300),  # <-- 'Border' con B mayúscula
+            border_radius=8,
+            heading_row_color=ft.Colors.GREY_100,
+        )
+
+        return ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(
+                            ft.Icons.POINT_OF_SALE,
+                            size=24,
+                            color=ft.Colors.BLUE_800,
+                        ),
+                        ft.Text(
+                            "Historial de Arqueos y Cortes Ciegos",
+                            size=18,
+                            weight=ft.FontWeight.BOLD,
+                        ),
+                    ],
+                    spacing=8,
+                ),
+                ft.Text(
+                    "Resultados de las entregas de dinero físico contrastados contra las ventas del sistema.",
+                    color=ft.Colors.GREY_600,
+                    size=13,
+                ),
+                ft.Row([tabla], scroll=ft.ScrollMode.AUTO),
+            ],
+            spacing=12,
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
         )
