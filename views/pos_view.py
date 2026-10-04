@@ -308,60 +308,6 @@ class PosView(ft.Container):
         self.tabla_carrito.rows.clear()
 
         for idx, item in enumerate(self.pos_controller.carrito):
-            btn_restar = ft.IconButton(
-                icon=ft.Icons.REMOVE_CIRCLE_OUTLINED,
-                icon_color=ft.Colors.ORANGE_700,
-                on_click=lambda e, i=idx: (self.pos_controller.decrementar_cantidad(i), self.actualizar_carrito_ui()),
-            )
-            btn_sumar = ft.IconButton(
-                icon=ft.Icons.ADD_CIRCLE_OUTLINED,
-                icon_color=ft.Colors.GREEN_700,
-                on_click=lambda e, i=idx: (self.pos_controller.incrementar_cantidad(i), self.actualizar_carrito_ui()),
-            )
-            btn_eliminar = ft.IconButton(
-                icon=ft.Icons.DELETE_OUTLINE,
-                icon_color=ft.Colors.RED_400,
-                on_click=lambda e, i=idx: (self.pos_controller.eliminar_item(i), self.actualizar_carrito_ui()),
-            )
-
-            if item.es_retornable:
-                cant_c = item.envases_a_cobrar
-                tot_dep = item.costo_total_envases
-                txt_btn = f"+${tot_dep:.2f} ({cant_c} env)" if cant_c > 0 else "Trajo Envase ($0)"
-                btn_env = ft.Button(
-                    txt_btn,
-                    icon=ft.Icons.WINE_BAR,
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.Colors.ORANGE_800 if cant_c > 0 else ft.Colors.BLUE_GREY_600,
-                        color=ft.Colors.WHITE,
-                    ),
-                    on_click=lambda e, i=idx: self._click_envase(i),
-                )
-            else:
-                btn_env = ft.Text("—", color=ft.Colors.GREY_500)
-
-            self.tabla_carrito.rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(item.nombre)),
-                        ft.DataCell(ft.Text(f"${item.precio_unitario:.2f}")),
-                        ft.DataCell(ft.Text(str(item.cantidad))),
-                        ft.DataCell(ft.Text(f"${item.subtotal_articulos:.2f}")),
-                        ft.DataCell(btn_env),
-                        ft.DataCell(ft.Row([btn_restar, btn_sumar, btn_eliminar], spacing=0)),
-                    ]
-                )
-            )
-
-        self.lbl_total.value = f"${self.pos_controller.total_bruto:.2f}"
-        self.lbl_items.value = f"{self.pos_controller.total_articulos} artículo(s) en carrito"
-        self.pagina.update()
-    
-
-    def actualizar_carrito_ui(self):
-        self.tabla_carrito.rows.clear()
-
-        for idx, item in enumerate(self.pos_controller.carrito):
             # Detectar si el artículo se vende por peso
             unidad = str(getattr(item, "unidad_medida", "")).lower()
             es_granel = any(k in unidad for k in ["kilo", "kg", "gramo", "lt", "litro"])
