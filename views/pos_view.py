@@ -604,16 +604,164 @@ class PosView(ft.Container):
             self.mostrar_mensaje(f" {err}", ft.Colors.RED_600)
                     
     def _configurar_atajos_teclado(self):
+        """Atajos globales de teclado para el POS (mostrador y laptops)."""
+        def enfocar_buscador():
+            try:
+                self.pagina.run_task(self.buscador_pos.txt_buscar.focus)
+            except Exception:
+                try:
+                    self.buscador_pos.txt_buscar.focus()
+                except Exception:
+                    pass
+
         def on_teclado(e: ft.KeyboardEvent):
-            if e.ctrl and e.key in ["Enter", " "]:
-                if not self.modal_cobro.open and not self.modal_salida_caja.open and not self.modal_envase.open:
-                    self.abrir_modal_cobro()
-            elif e.key == "Escape":
-                self.modal_cobro.cerrar()
-                self.modal_salida_caja.cerrar()
-                self.modal_envase.cerrar()
-                self.buscador_pos.txt_buscar.autofocus = True
-                self.pagina.update()
+            key_lower = (e.key or "").lower()
+            carrito = getattr(self.pos_controller, "carrito", [])
+            tiene_articulos = len(carrito) > 0
+
+            # Estado del modal de granel/pesaje
+            granel_abierto = (
+                hasattr(self, "modal_granel")
+                and getattr(self.modal_granel, "dialogo", None) is not None
+                and getattr(self.modal_granel.dialogo, "open", False)
+            )
+
+            # Estado de las sugerencias del buscador
+            sugerencias_visibles = (
+                hasattr(self, "buscador_pos")
+                and getattr(self.buscador_pos, "cont_sugerencias", None) is not None
+                and getattr(self.buscador_pos.cont_sugerencias, "visible", False)
+            )
+
+            # -----------------------------------------------------------------
+            # 1. NAVEGACIÓN EN SUGERENCIAS DEL BUSCADOR (Flechas Arriba / Abajo)
+            # -----------------------------------------------------------------
+            if e.key in ["Arrow Down", "Down"]:
+                if sugerencias_visibles and hasattr(self.buscador_pos, "mover_seleccion"):
+                    if self.buscador_pos.mover_seleccion(1):
+                        return
+
+            if e.key in ["Arrow Up", "Up"]:
+                if sugerencias_visibles and hasattr(self.buscador_pos, "mover_seleccion"):
+                    if self.buscador_pos.mover_seleccion(-1):
+                        return
+
+            # -----------------------------------------------------------------
+            # 2. CONFIRMAR SELECCIÓN CON ENTER (Modal granel o Buscador)
+            # -----------------------------------------------------------------
+            if e.key in ["Enter", "Numpad Enter"] and not e.ctrl:
+                # Prioridad A: Modal de granel abierto -> disparar su botón de confirmar
+                if granel_abierto:
+                    if hasattr(self.modal_granel, "_confirmar"):
+                        self.modal_granel._confirmar(None)
+                    elif hasattr(self.modal_granel, "confirmar"):
+                        self.modal_granel.confirmar()
+                    return
+
+                # Prioridad B: Sugerencias abiertas en el buscador -> seleccionar item resaltado
+                if sugerencias_visibles and hasattr(self.buscador_pos, "_al_presionar_enter"):
+                    if self.buscador_pos._al_presionar_enter(e):
+                        return
+
+            # -----------------------------------------------------------------
+            # 3. ENFOQUE RÁPIDO AL BUSCADOR (F1, Ctrl+B, Ctrl+F)
+            # -----------------------------------------------------------------
+            if e.key == "F1" or (e.ctrl and key_lower in ["b", "f"]):
+                enfocar_buscador()
+                return
+
+            # -----------------------------------------------------------------
+            # 4. COBRO RÁPIDO (F12, Ctrl+Enter, Ctrl+Espacio)
+            # -----------------------------------------------------------------
+            if e.key == "F12" or (e.ctrl and e.key in ["Enter", " "]):
+                modales_activos = (
+                    getattr(self.modal_cobro, "open", False)
+                    or getattr(self.modal_salida_caja, "open", False)
+                    or getattr(self.modal_envase, "open", False)
+                    or granel_abierto
+                )
+                if not modales_activos:
+                    if not tiene_articulos:
+                        if hasattr(self, "mostrar_mensaje"):
+                            self.mostrar_mensaje(
+                                "⚠ El carrito está vacío. Agrega productos antes de cobrar.",
+                                ft.Colors.ORANGE_700,
+                            )
+                    else:
+                        self.abrir_modal_cobro()
+                return
+
+            # -----------------------------------------------------------------
+            # 5. VACIAR CARRITO (F4, Ctrl+Delete, Ctrl+Backspace)
+            # -----------------------------------------------------------------
+            if e.key == "F4" or (e.ctrl and e.key in ["Delete", "Backspace"]):
+                modales_activos = (
+                    getattr(self.modal_cobro, "open", False)
+                    or getattr(self.modal_salida_caja, "open", False)
+                    or granel_abierto
+                )
+                if not modales_activos:
+                    if not tiene_articulos:
+                        if hasattr(self, "mostrar_mensaje"):
+                            self.mostrar_mensaje(
+                                "ℹ No hay productos en el carrito para cancelar.",
+                                ft.Colors.BLUE_GREY_600,
+                            )
+                    else:
+                        if hasattr(self.pos_controller, "limpiar_carrito"):
+                            self.pos_controller.limpiar_carrito()
+                        elif hasattr(self.pos_controller, "vaciar_carrito"):
+                            self.pos_controller.vaciar_carrito()
+                        else:
+                            self.pos_controller.carrito.clear()
+
+                        self.actualizar_carrito_ui()
+                        if hasattr(self, "mostrar_mensaje"):
+                            self.mostrar_mensaje(
+                                "🗑 Carrito vaciado correctamente.",
+                                ft.Colors.GREY_700,
+                            )
+                return
+
+            # -----------------------------------------------------------------
+            # 6. SALIDA / RETIRO DE EFECTIVO (F9 o Ctrl+R)
+            # -----------------------------------------------------------------
+            if e.key == "F9" or (e.ctrl and key_lower == "r"):
+                if hasattr(self, "modal_salida_caja") and not getattr(self.modal_salida_caja, "open", False):
+                    try:
+                        self.modal_salida_caja.abrir()
+                    except Exception:
+                        pass
+                return
+
+            # -----------------------------------------------------------------
+            # 7. ESCAPE: CERRAR CUALQUIER MODAL Y VOLVER AL BUSCADOR
+            # -----------------------------------------------------------------
+            if e.key == "Escape":
+                if hasattr(self, "modal_granel"):
+                    try:
+                        self.modal_granel.cerrar()
+                    except Exception:
+                        pass
+
+                for modal_attr in ["modal_cobro", "modal_salida_caja", "modal_envase"]:
+                    obj = getattr(self, modal_attr, None)
+                    if obj:
+                        if hasattr(obj, "cerrar"):
+                            try:
+                                obj.cerrar()
+                            except Exception:
+                                pass
+                        elif getattr(obj, "open", False):
+                            obj.open = False
+                            self.pagina.update()
+
+                # Cerrar la lista de sugerencias si estaba abierta
+                if sugerencias_visibles:
+                    self.buscador_pos.cont_sugerencias.visible = False
+                    self.buscador_pos.update()
+
+                enfocar_buscador()
 
         self.pagina.on_keyboard_event = on_teclado
 

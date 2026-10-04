@@ -46,6 +46,9 @@ class BuscadorAutocompletado(ft.Column):
         )
 
         # 2. Contenedor de sugerencias flotantes
+        self._sugerencias_actuales = []
+        self._indice_seleccionado = -1
+        self._items_controles = []
         self.col_sugerencias = ft.Column(spacing=2, scroll=ft.ScrollMode.AUTO)
         self.cont_sugerencias = ft.Container(
             content=self.col_sugerencias,
@@ -95,12 +98,18 @@ class BuscadorAutocompletado(ft.Column):
     def _al_escribir_texto(self, e):
         termino = self.txt_buscar.value.strip()
         if not termino:
+            self._sugerencias_actuales = []
+            self._items_controles = []
+            self._indice_seleccionado = -1
             self.cont_sugerencias.visible = False
             self.update()
             return
 
         coincidencias = self.funcion_busqueda(termino)[: self.limite_resultados]
         self.col_sugerencias.controls.clear()
+        self._sugerencias_actuales = coincidencias
+        self._items_controles = []
+        self._indice_seleccionado = -1
 
         if not coincidencias:
             self.col_sugerencias.controls.append(
@@ -115,7 +124,6 @@ class BuscadorAutocompletado(ft.Column):
             )
         else:
             for item in coincidencias:
-
                 def click_item(ev, it=item):
                     self.seleccionar_item(it)
 
@@ -130,40 +138,77 @@ class BuscadorAutocompletado(ft.Column):
                     else None
                 )
 
+                # Creamos el ListTile base
                 tile = ft.ListTile(
-                    title=ft.Text(
-                        self.generador_titulo(item),
-                        size=13,
-                        weight=ft.FontWeight.W_500,
-                    ),
-                    subtitle=ft.Text(subtitulo_texto, size=11)
-                    if subtitulo_texto
-                    else None,
-                    trailing=ft.Text(
-                        trailing_texto,
-                        size=13,
-                        weight=ft.FontWeight.BOLD,
-                        color=ft.Colors.GREEN_700,
-                    )
-                    if trailing_texto
-                    else None,
-                    on_click=click_item,
+                    title=ft.Text(self.generador_titulo(item), size=13, weight=ft.FontWeight.W_500),
+                    subtitle=ft.Text(subtitulo_texto, size=11, color=ft.Colors.GREY_600) if subtitulo_texto else None,
+                    trailing=ft.Text(trailing_texto, size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700) if trailing_texto else None,
                     dense=True,
+                    on_click=click_item,
                 )
-                self.col_sugerencias.controls.append(tile)
+
+                # Lo envolvemos en un Container para controlar el color de fondo al navegar
+                contenedor_item = ft.Container(
+                    content=tile,
+                    border_radius=6,
+                    bgcolor=ft.Colors.TRANSPARENT,
+                )
+
+                self._items_controles.append(contenedor_item)
+                self.col_sugerencias.controls.append(contenedor_item)
 
         self.cont_sugerencias.visible = True
         self.update()
 
-    def _al_presionar_enter(self, e):
-        termino = self.txt_buscar.value.strip()
-        if not termino:
-            return
+    def mover_seleccion(self, delta: int) -> bool:
+        """Navega entre las opciones con flechas arriba/abajo."""
+        if not self.cont_sugerencias.visible or not self._sugerencias_actuales:
+            return False
 
-        coincidencias = self.funcion_busqueda(termino)
-        if coincidencias:
-            self.seleccionar_item(coincidencias[0])
+        total = len(self._sugerencias_actuales)
+        nuevo_indice = self._indice_seleccionado + delta
 
+        if nuevo_indice < 0:
+            nuevo_indice = total - 1
+        elif nuevo_indice >= total:
+            nuevo_indice = 0
+
+        self._indice_seleccionado = nuevo_indice
+
+        # Crear el borde de forma segura y compatible
+        borde_activo = None
+        if hasattr(ft, "Border") and hasattr(ft.Border, "all"):
+            borde_activo = ft.Border.all(1.5, ft.Colors.BLUE_600)
+        elif hasattr(ft, "border") and hasattr(ft.border, "all"):
+            borde_activo = ft.border.all(1.5, ft.Colors.BLUE_600)
+
+        for i, control in enumerate(self._items_controles):
+            if i == self._indice_seleccionado:
+                control.bgcolor = ft.Colors.BLUE_100
+                control.border = borde_activo
+            else:
+                control.bgcolor = ft.Colors.TRANSPARENT
+                control.border = None
+
+        try:
+            self.cont_sugerencias.update()
+        except Exception:
+            try:
+                self.col_sugerencias.update()
+            except Exception:
+                self.update()
+
+        return True
+    
+    def _al_presionar_enter(self, e=None):
+        """Selecciona el elemento resaltado o el primero de la lista."""
+        if self.cont_sugerencias.visible and self._sugerencias_actuales:
+            indice = self._indice_seleccionado if 0 <= self._indice_seleccionado < len(self._sugerencias_actuales) else 0
+            item = self._sugerencias_actuales[indice]
+            self.seleccionar_item(item)
+            return True
+        return False
+    
     def seleccionar_item(self, item: Any):
         self.item_seleccionado = item
         self.cont_sugerencias.visible = False

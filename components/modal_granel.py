@@ -20,6 +20,7 @@ class ModalVentaGranel:
             autofocus=True,
             width=280,
             on_change=self._al_cambiar_peso,
+            on_submit=lambda e: self.al_confirmar(e),
         )
 
         self.txt_importe = ft.TextField(
@@ -29,6 +30,7 @@ class ModalVentaGranel:
             prefix_icon=ft.Icons.ATTACH_MONEY,
             width=280,
             on_change=self._al_cambiar_importe,
+            on_submit=lambda e: self._confirmar(e),
         )
 
         self.lbl_info_precio = ft.Text(
