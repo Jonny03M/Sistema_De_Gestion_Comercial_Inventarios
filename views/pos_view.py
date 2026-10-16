@@ -378,7 +378,7 @@ class PosView(ft.Container):
             )
 
         self.lbl_total.value = f"${self.pos_controller.total_bruto:.2f}"
-        self.lbl_items.value = f"{self.pos_controller.total_articulos} artículo(s) en carrito"
+        self.lbl_items.value = f"{len(self.pos_controller.carrito)} artículo(s) en carrito"
         self.pagina.update()
 
     
@@ -752,20 +752,28 @@ class PosView(ft.Container):
         }
         self.modal_granel.abrir(prod_dict)
 
-    
     def _agregar_producto_granel_al_carrito(self, producto: dict, peso: float, importe: float):
-        """Aplica la cantidad calculada por peso o importe."""
+        """Aplica la cantidad calculada por peso o importe exacto."""
+        from decimal import Decimal
+
         if "indice_carrito" in producto:
-            from decimal import Decimal
             idx = producto["indice_carrito"]
-            self.pos_controller.carrito[idx].cantidad = Decimal(str(round(peso, 3)))
-            self.pos_controller.recalcular_totales()
+            item = self.pos_controller.carrito[idx]
+            if importe > 0 and item.precio_unitario > 0:
+                item.cantidad = Decimal(str(importe)) / item.precio_unitario
+            else:
+                item.cantidad = Decimal(str(peso))
         else:
-            self.pos_controller.agregar_producto(producto, cantidad=round(peso, 3))
+            self.pos_controller.agregar_producto(
+                producto, 
+                cantidad=peso, 
+                importe_fijo=importe
+            )
 
         self.actualizar_carrito_ui()
-        self.mostrar_mensaje(f"Agregado: {producto.get('nombre', '')} ({peso:.3f} kg)", "green")
+        self.mostrar_mensaje(f"Agregado: {producto.get('nombre', '')} (${importe:.2f})", "green")
 
+    
     def _mostrar_modal_vista_previa_ticket(self, texto_ticket: str, id_venta: int):
         """Muestra el diálogo con la vista previa del ticket y opción de imprimir."""
         def cerrar_dialogo(e=None):

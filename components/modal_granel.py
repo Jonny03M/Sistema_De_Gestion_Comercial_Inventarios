@@ -20,7 +20,6 @@ class ModalVentaGranel:
             autofocus=True,
             width=280,
             on_change=self._al_cambiar_peso,
-            on_submit=lambda e: self.al_confirmar(e),
         )
 
         self.txt_importe = ft.TextField(
@@ -30,7 +29,6 @@ class ModalVentaGranel:
             prefix_icon=ft.Icons.ATTACH_MONEY,
             width=280,
             on_change=self._al_cambiar_importe,
-            on_submit=lambda e: self._confirmar(e),
         )
 
         self.lbl_info_precio = ft.Text(
@@ -94,26 +92,6 @@ class ModalVentaGranel:
             actions_alignment=ft.MainAxisAlignment.END,
         )
 
-    def abrir(self, producto: Dict):
-        """Prepara el diálogo con los datos del producto seleccionado."""
-        self.producto_actual = producto
-        self.precio_unitario = float(producto.get("precio_venta", 0.0))
-
-        self.lbl_info_precio.value = f"Artículo: {producto.get('nombre', '')} (${self.precio_unitario:.2f} / kg)"
-        self.txt_peso.value = ""
-        self.txt_importe.value = ""
-        self.lbl_resumen.value = "Total a cobrar: $0.00 por 0.000 kg"
-
-        # Apertura segura compatible con Flet moderno
-        try:
-            self.page.open(self.dialogo)
-        except Exception:
-            if self.dialogo not in self.page.overlay:
-                self.page.overlay.append(self.dialogo)
-            self.dialogo.open = True
-            if self.page:
-                self.page.update()
-
     def cerrar(self):
         try:
             self.page.close(self.dialogo)
@@ -121,15 +99,60 @@ class ModalVentaGranel:
             self.dialogo.open = False
             if self.page:
                 self.page.update()
-                
+                 
+    def abrir(self, producto):
+        """Abre el diálogo para ingresar peso o dinero."""
+        self.producto_actual = producto
+
+        # Extraer precio admitiendo objeto o diccionario
+        if isinstance(producto, dict):
+            precio_val = producto.get("precio_venta") or producto.get("precio") or 0.0
+            nombre_val = producto.get("nombre") or "Producto"
+        else:
+            precio_val = getattr(producto, "precio_venta", None) or getattr(producto, "precio", 0.0) or 0.0
+            nombre_val = getattr(producto, "nombre", "Producto")
+
+        self.precio_unitario = float(precio_val)
+        self._ultimo_modo = "peso"
+        self._peso_exacto = 0.0
+        self._procesando = False
+
+        # Resetear campos
+        self.txt_peso.value = ""
+        self.txt_importe.value = ""
+        self.lbl_resumen.value = "Ingresa peso o importe deseado"
+
+        if hasattr(self, "lbl_info_precio"):
+            self.lbl_info_precio.value = f"Artículo: {nombre_val} (${self.precio_unitario:.2f} / kg)"
+
+        if hasattr(self.page, "open"):
+            self.page.open(self.dialogo)
+        else:
+            self.dialogo.open = True
+            if self.dialogo not in self.page.overlay:
+                self.page.overlay.append(self.dialogo)
+            self.page.update()
+
+        try:
+            self.txt_peso.focus()
+            self.page.update()
+        except Exception:
+            pass
+
     def _al_cambiar_peso(self, e):
         """Calcula el importe automáticamente a partir del peso ingresado."""
-        if not self.txt_peso.focus:
-            return
         try:
-            val = self.txt_peso.value.strip()
-            peso = float(val) if val else 0.0
+            val = (self.txt_peso.value or "").strip()
+            if not val:
+                self.txt_importe.value = ""
+                self.lbl_resumen.value = "Ingresa peso o importe deseado"
+                self.page.update()
+                return
+
+            peso = float(val)
             if peso >= 0:
+                self._ultimo_modo = "peso"
+                self._peso_exacto = peso
                 importe = round(peso * self.precio_unitario, 2)
                 self.txt_importe.value = f"{importe:.2f}"
                 self.lbl_resumen.value = f"Total a cobrar: ${importe:.2f} por {peso:.3f} kg"
@@ -139,29 +162,59 @@ class ModalVentaGranel:
 
     def _al_cambiar_importe(self, e):
         """Calcula el peso automáticamente a partir del importe ingresado."""
-        if not self.txt_importe.focus:
-            return
         try:
-            val = self.txt_importe.value.strip()
-            importe = float(val) if val else 0.0
+            val = (self.txt_importe.value or "").strip()
+            if not val:
+                self.txt_peso.value = ""
+                self.lbl_resumen.value = "Ingresa peso o importe deseado"
+                self.page.update()
+                return
+
+            importe = float(val)
             if importe >= 0 and self.precio_unitario > 0:
-                peso = round(importe / self.precio_unitario, 3)
-                self.txt_peso.value = f"{peso:.3f}"
-                self.lbl_resumen.value = f"Total a cobrar: ${importe:.2f} por {peso:.3f} kg"
+                self._ultimo_modo = "importe"
+                self._peso_exacto = importe / self.precio_unitario
+                peso_mostrado = round(self._peso_exacto, 3)
+                self.txt_peso.value = f"{peso_mostrado:.3f}"
+                self.lbl_resumen.value = f"Total a cobrar: ${importe:.2f} por {peso_mostrado:.3f} kg"
                 self.page.update()
         except ValueError:
             pass
 
-    def _confirmar(self, e):
+    def _confirmar(self, e=None):
+        if getattr(self, "_procesando", False):
+            return
+
         try:
-            peso = float(self.txt_peso.value.strip() or 0.0)
-            importe = float(self.txt_importe.value.strip() or 0.0)
+            val_peso = (self.txt_peso.value or "").strip()
+            val_importe = (self.txt_importe.value or "").strip()
+
+            if not val_peso and not val_importe:
+                return
+
+            # Si el usuario solo escribió importe, calculamos el peso antes de enviar
+            if not val_peso and val_importe and self.precio_unitario > 0:
+                importe = float(val_importe)
+                peso = importe / self.precio_unitario
+            # Si el usuario solo escribió peso, calculamos el importe
+            elif not val_importe and val_peso:
+                peso = float(val_peso)
+                importe = round(peso * self.precio_unitario, 2)
+            else:
+                importe = float(val_importe)
+                if getattr(self, "_ultimo_modo", "peso") == "importe" and hasattr(self, "_peso_exacto") and self._peso_exacto > 0:
+                    peso = self._peso_exacto
+                else:
+                    peso = float(val_peso)
 
             if peso <= 0 or importe <= 0:
                 return
 
+            self._procesando = True
             self.cerrar()
+
             if self.al_confirmar and self.producto_actual:
                 self.al_confirmar(self.producto_actual, peso, importe)
+
         except ValueError:
-            pass
+            self._procesando = False
