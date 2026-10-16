@@ -372,13 +372,18 @@ class ComprasView(ft.Container):
         self.tabla_proveedores.rows.clear()
         provs = obtener_todos_los_proveedores()
         for p in provs:
-            btn_edit = ft.IconButton(
-                icon=ft.Icons.EDIT_OUTLINED,
-                icon_color=ft.Colors.BLUE_600,
-                tooltip="Editar proveedor",
-                visible=self.es_admin,
-                on_click=lambda e, p_data=p: self.abrir_modal_editar_prov(p_data),
-            )
+            if self.es_admin:
+                celda_accion = ft.DataCell(
+                    ft.IconButton(
+                        icon=ft.Icons.EDIT_OUTLINED,
+                        icon_color=ft.Colors.BLUE_600,
+                        tooltip="Editar proveedor",
+                        on_click=lambda e, p_data=p: self.abrir_modal_editar_prov(p_data),
+                    )
+                )
+            else:
+                celda_accion = ft.DataCell(ft.Text("—", color=ft.Colors.GREY_500))
+
             self.tabla_proveedores.rows.append(
                 ft.DataRow(
                     cells=[
@@ -386,7 +391,7 @@ class ComprasView(ft.Container):
                         ft.DataCell(ft.Text(p["nombre_empresa"], weight=ft.FontWeight.BOLD)),
                         ft.DataCell(ft.Text(p["contacto_nombre"] or "—")),
                         ft.DataCell(ft.Text(p["telefono"] or "—")),
-                        ft.DataCell(btn_edit),
+                        celda_accion,
                     ]
                 )
             )

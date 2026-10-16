@@ -404,6 +404,8 @@ def main(page: ft.Page):
                 contenedor_principal.content = ConfiguracionView(
                     page, mostrar_mensaje
                 )
+            else: 
+                contenedor_principal.content = vista_pos
 
             page.update()
 
